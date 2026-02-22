@@ -1,0 +1,43 @@
+// ============================================================
+// CONFIG - ตั้งค่าการเชื่อมต่อ Google Sheets API
+// ============================================================
+
+const CONFIG = {
+    // Google Apps Script Web App URL
+    // ให้นำ URL ที่ได้จากการ Deploy Apps Script มาใส่ที่นี่
+    APPS_SCRIPT_URL: '',
+
+    // Google Sheets ID (สำหรับ direct API - optional)
+    SHEET_ID: '',
+
+    // Google API Key (สำหรับ direct API - optional)
+    API_KEY: '',
+
+    // ชื่อ Sheet แต่ละหน้า
+    SHEET_NAMES: {
+        page1: 'นายทหารสัญญาบัตร',
+        page2: 'ร้อย.1',
+        page3: 'ร้อย.อวบ.2',
+        page4: 'ร้อย.อวบ.3',
+        page5: 'ร้อย.บก.'
+    },
+
+    // ใช้ข้อมูล Local (ถ้ายังไม่ได้เชื่อมต่อ Google Sheets)
+    USE_LOCAL_DATA: true,
+
+    // Auto-save interval (ms)
+    AUTO_SAVE_INTERVAL: 30000,
+
+    // หน่วยงาน
+    UNIT_NAME: 'ร.19 พัน.1',
+    UNIT_FULL_NAME: 'กองพันทหารราบที่ 1 กรมทหารราบที่ 19',
+
+    // Tax form type
+    TAX_FORM: 'ภ.ง.ด. 90/91',
+
+    // Status options
+    STATUS: {
+        FILED: 'ดำเนินการยื่นภาษีแล้ว',
+        NOT_FILED: 'ยังไม่ยื่น'
+    }
+};

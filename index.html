@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบยืนยันการยื่นภาษี ภ.ง.ด. 90/91 | ร.19 พัน.1</title>
+
+    <!-- Preconnect -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+    <!-- Noto Sans Thai for Thai text -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Stylesheet -->
+    <link rel="stylesheet" href="css/style.css">
+
+    <!-- Override font with Inter + Noto Sans Thai -->
+    <style>
+        :root {
+            --font-family: 'Inter', 'Noto Sans Thai', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', sans-serif;
+        }
+    </style>
+
+    <!-- Favicon (simple text-based) -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>Tax</text></svg>">
+</head>
+<body>
+
+    <!-- ===== APP LOADER ===== -->
+    <div id="appLoader" style="
+        position: fixed; inset: 0; z-index: 9999;
+        background: #f5f5f7;
+        display: flex; align-items: center; justify-content: center;
+        flex-direction: column; gap: 16px;
+        transition: opacity 0.3s ease;
+    ">
+        <div style="font-size: 22px; font-weight: 700; color: #1d1d1f; letter-spacing: -0.02em; font-family: 'Inter', 'Noto Sans Thai', sans-serif;">
+            ระบบยืนยันการยื่นภาษี
+        </div>
+        <div style="font-size: 13px; color: #86868b; font-family: 'Inter', 'Noto Sans Thai', sans-serif;">
+            กำลังโหลดข้อมูล...
+        </div>
+        <div style="width: 120px; height: 3px; background: rgba(0,0,0,0.06); border-radius: 99px; overflow: hidden; margin-top: 8px;">
+            <div style="width: 40%; height: 100%; background: #0071e3; border-radius: 99px; animation: loaderSlide 1.2s ease-in-out infinite;"></div>
+        </div>
+        <style>
+            @keyframes loaderSlide {
+                0% { transform: translateX(-100%); }
+                50% { transform: translateX(150%); }
+                100% { transform: translateX(-100%); }
+            }
+        </style>
+    </div>
+
+    <!-- ===== LOGIN OVERLAY ===== -->
+    <div id="loginOverlay" class="login-overlay" style="display: none;">
+        <div class="login-container">
+            <div class="login-header">
+                <div class="login-logo">ระบบยืนยันการยื่นภาษี</div>
+                <div class="login-subtitle">ภ.ง.ด. 90/91 | ร.19 พัน.1</div>
+                <p class="login-desc">เลือกชื่อของคุณเพื่อยืนยันสถานะการยื่นภาษีด้วยตนเอง</p>
+            </div>
+
+            <!-- Search in login -->
+            <div class="login-search">
+                <svg class="search-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"/>
+                </svg>
+                <input type="text" class="search-input" id="loginSearch"
+                       placeholder="ค้นหาชื่อ นามสกุล หรือยศ..."
+                       oninput="app.filterLoginList(this.value)">
+            </div>
+
+            <!-- Personnel list -->
+            <div class="login-personnel-list" id="loginPersonnelList">
+                <!-- รันเดอร์โดย JS -->
+            </div>
+
+            <!-- Admin login toggle -->
+            <div class="login-admin-section">
+                <button class="login-admin-toggle" onclick="app.toggleAdminLogin()">
+                    เข้าสู่ระบบแบบ Admin
+                </button>
+                <div id="adminLoginSection" style="display: none;" class="admin-pin-section">
+                    <input type="password" id="adminPinInput" class="admin-pin-input" placeholder="กรอกรหัส PIN" maxlength="10"
+                           onkeypress="if(event.key==='Enter') app.loginAsAdmin()">
+                    <button class="btn btn-primary" onclick="app.loginAsAdmin()">เข้าสู่ระบบ</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== TOP HEADER ===== -->
+    <header class="top-header">
+        <div class="top-header-inner">
+            <div style="display: flex; align-items: center; gap: 16px;">
+                <div class="top-header-title">ระบบยืนยันการยื่นภาษี</div>
+                <div class="top-header-unit">ภ.ง.ด. 90/91</div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <div id="userInfo" style="display:none; align-items: center; gap: 8px;"></div>
+                <div class="connection-status" id="storageIndicator" style="font-size: 11px; gap: 6px;">
+                    <!-- Updated by JS -->
+                </div>
+                <div class="connection-status">
+                    <span class="connection-dot" id="connectionDot"></span>
+                    <span id="connectionText">Online</span>
+                </div>
+                <button class="btn-icon" onclick="app.exportAllData()" title="Export ทั้งหมด">
+                    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                            d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/>
+                    </svg>
+                </button>
+                <button class="btn-icon" onclick="app.showAuditLog()" title="ประวัติการใช้งาน">
+                    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                            d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- ===== NAVIGATION TABS ===== -->
+    <nav class="nav-container">
+        <div class="nav-tabs" id="navTabs">
+            <!-- Rendered by JS -->
+        </div>
+    </nav>
+
+    <!-- ===== MAIN CONTENT ===== -->
+    <main class="main-content" id="mainApp">
+        <div id="pageContent" class="page-content">
+
+            <!-- Page Header -->
+            <div class="page-header">
+                <h1 class="page-title" id="pageTitle">กำลังโหลด...</h1>
+                <p class="page-subtitle" id="pageSubtitle"></p>
+            </div>
+
+            <!-- Stats Row -->
+            <div class="stats-row" id="statsRow">
+                <!-- Rendered by JS -->
+            </div>
+
+            <!-- Progress Section -->
+            <div class="progress-section">
+                <div class="progress-header">
+                    <span class="progress-label">ความคืบหน้าการยื่นภาษี</span>
+                    <span class="progress-percentage" id="progressPercentage">0%</span>
+                </div>
+                <div class="progress-bar-container">
+                    <div class="progress-bar-fill" id="progressFill" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <!-- Toolbar -->
+            <div class="toolbar">
+                <div class="toolbar-left">
+                    <!-- Search -->
+                    <div class="search-container">
+                        <svg class="search-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"/>
+                        </svg>
+                        <input type="text" class="search-input" id="searchInput"
+                               placeholder="ค้นหาชื่อ นามสกุล หรือยศ...">
+                    </div>
+
+                    <!-- Filter -->
+                    <div class="filter-group">
+                        <button class="filter-btn active" data-filter="all" onclick="app.setFilter('all')">
+                            ทั้งหมด
+                        </button>
+                        <button class="filter-btn" data-filter="filed" onclick="app.setFilter('filed')">
+                            ยื่นแล้ว
+                        </button>
+                        <button class="filter-btn" data-filter="not-filed" onclick="app.setFilter('not-filed')">
+                            ยังไม่ยื่น
+                        </button>
+                        <button class="filter-btn" data-filter="pending" onclick="app.setFilter('pending')">
+                            รอดำเนินการ
+                        </button>
+                    </div>
+                </div>
+
+                <div class="toolbar-right">
+                    <button class="btn btn-success" onclick="app.markAllAsFiled()">
+                        <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        ยื่นทั้งหมด
+                    </button>
+                    <button class="btn btn-secondary" onclick="app.resetAllStatus()">
+                        <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182"/>
+                        </svg>
+                        รีเซ็ตหน้านี้
+                    </button>
+                    <button class="btn btn-secondary" onclick="app.resetAllData()" style="color: var(--color-danger); border: 0.5px solid var(--color-danger-light);">
+                        <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"/>
+                        </svg>
+                        ลบทั้งหมด
+                    </button>
+                </div>
+            </div>
+
+            <!-- Data Table -->
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 40px;">
+                                <div class="checkbox-wrapper">
+                                    <input type="checkbox" class="checkbox-input"
+                                           onchange="app.toggleSelectAll(this.checked)">
+                                </div>
+                            </th>
+                            <th style="width: 56px;">ลำดับ</th>
+                            <th style="width: 100px;">ยศ</th>
+                            <th>ชื่อ - สกุล</th>
+                            <th style="width: 200px;">สถานะ ภ.ง.ด. 90/91</th>
+                            <th class="hide-mobile" style="width: 170px;">การยืนยัน</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody">
+                        <!-- Rendered by JS -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Page Footer -->
+            <div class="page-footer" id="pageFooter">
+                <!-- Rendered by JS -->
+            </div>
+
+        </div>
+    </main>
+
+    <!-- ===== BATCH ACTION BAR ===== -->
+    <div class="batch-bar" id="batchBar">
+        <span class="batch-bar-text">
+            เลือกแล้ว <span class="batch-bar-count" id="batchCount">0</span> รายการ
+        </span>
+        <button class="batch-btn batch-btn-filed"
+                onclick="app.batchUpdateStatus(CONFIG.STATUS.FILED)">
+            ยื่นภาษีแล้ว
+        </button>
+        <button class="batch-btn batch-btn-cancel"
+                onclick="app.batchUpdateStatus(CONFIG.STATUS.NOT_FILED)">
+            ยังไม่ยื่น
+        </button>
+        <button class="batch-btn batch-btn-cancel"
+                onclick="app.selectedRows.clear(); app.renderTable(app.currentPage); app.updateBatchBar();">
+            ยกเลิก
+        </button>
+    </div>
+
+    <!-- ===== AUDIT LOG MODAL ===== -->
+    <div class="audit-modal-overlay" id="auditLogModal" style="display: none;">
+        <div class="audit-modal">
+            <div class="audit-modal-header">
+                <h2 class="audit-modal-title">ประวัติการใช้งาน (Audit Log)</h2>
+                <div style="display:flex;gap:8px;">
+                    <button class="btn btn-secondary" onclick="app.exportAuditLog()">
+                        <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/></svg>
+                        Export
+                    </button>
+                    <button class="btn-icon" onclick="app.closeAuditLog()">
+                        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                </div>
+            </div>
+            <div class="audit-table-container">
+                <table class="data-table audit-table">
+                    <thead>
+                        <tr>
+                            <th style="width:130px;">เวลา</th>
+                            <th style="width:120px;">ผู้ดำเนินการ</th>
+                            <th style="width:130px;">การกระทำ</th>
+                            <th style="width:120px;">เป้าหมาย</th>
+                            <th>รายละเอียด</th>
+                        </tr>
+                    </thead>
+                    <tbody id="auditLogBody">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== TOAST CONTAINER ===== -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- ===== SCRIPTS ===== -->
+    <script src="js/config.js"></script>
+    <script src="js/data.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/app.js"></script>
+
+</body>
+</html>
