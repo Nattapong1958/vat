@@ -131,7 +131,7 @@ body {
     backdrop-filter: saturate(180%) blur(20px);
     -webkit-backdrop-filter: saturate(180%) blur(20px);
     border-bottom: 0.5px solid var(--color-border);
-    height: var(--header-height);
+    min-height: var(--header-height);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -144,6 +144,44 @@ body {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 12px;
+}
+
+.header-left {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-shrink: 0;
+    min-width: 0;
+}
+
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+    flex-shrink: 1;
+}
+
+.header-user-info {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.header-indicators {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+}
+
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
 }
 
 .top-header-title {
@@ -461,6 +499,19 @@ body {
 }
 
 /* --- Filter Segmented Control --- */
+.filter-group-wrapper {
+    display: flex;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    flex-shrink: 1;
+    min-width: 0;
+}
+
+.filter-group-wrapper::-webkit-scrollbar {
+    display: none;
+}
+
 .filter-group {
     display: flex;
     background: rgba(0, 0, 0, 0.05);
@@ -1061,31 +1112,109 @@ body {
 
 @media (max-width: 768px) {
     :root {
-        --header-height: 48px;
+        --header-height: auto;
     }
 
-    .main-content {
-        padding: var(--space-lg) var(--space-base);
-    }
-
-    /* ลด font-size header เล็กน้อย */
-    .top-header-title {
-        font-size: 15px;
-    }
-
-    .top-header-unit {
-        font-size: 12px;
+    /* === HEADER === */
+    .top-header {
+        min-height: 44px;
+        padding: 6px 0;
     }
 
     .top-header-inner {
         padding: 0 var(--space-md);
-        gap: 12px;
+        gap: 8px;
+        flex-wrap: wrap;
     }
 
+    .header-left {
+        gap: 10px;
+        min-width: 0;
+        flex: 1;
+    }
+
+    .top-header-title {
+        font-size: 14px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .top-header-unit {
+        font-size: 10px;
+        padding: 2px 8px;
+        white-space: nowrap;
+    }
+
+    .header-right {
+        gap: 8px;
+        flex-shrink: 0;
+    }
+
+    .header-user-info .user-info-name {
+        max-width: 90px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 11px;
+    }
+
+    .header-user-info .user-info-badge {
+        font-size: 9px;
+        padding: 2px 6px;
+    }
+
+    .header-indicators {
+        gap: 6px;
+    }
+
+    #storageIndicator {
+        font-size: 10px;
+        padding: 3px 8px;
+    }
+
+    .connection-status {
+        font-size: 10px;
+        gap: 4px;
+    }
+
+    .header-actions .btn-icon {
+        width: 30px;
+        height: 30px;
+    }
+
+    .header-actions .btn-icon svg {
+        width: 15px;
+        height: 15px;
+    }
+
+    /* === MAIN CONTENT === */
+    .main-content {
+        padding: var(--space-lg) var(--space-base);
+    }
+
+    /* === PAGE HEADER === */
     .page-title {
         font-size: var(--font-size-xl);
     }
 
+    .page-subtitle {
+        font-size: var(--font-size-sm);
+    }
+
+    /* === NAV TABS === */
+    .nav-container {
+        position: sticky;
+        top: 0;
+        z-index: 89;
+    }
+
+    .nav-tab {
+        padding: 6px 12px;
+        font-size: var(--font-size-xs);
+    }
+
+    /* === STATS === */
     .stats-row {
         grid-template-columns: repeat(2, 1fr);
         gap: var(--space-sm);
@@ -1099,9 +1228,19 @@ body {
         font-size: var(--font-size-lg);
     }
 
+    .stat-label {
+        font-size: 11px;
+    }
+
+    .stat-detail {
+        font-size: 10px;
+    }
+
+    /* === TOOLBAR === */
     .toolbar {
         flex-direction: column;
         align-items: stretch;
+        gap: var(--space-sm);
     }
 
     .toolbar-left,
@@ -1113,9 +1252,25 @@ body {
         max-width: 100%;
     }
 
+    .filter-group-wrapper {
+        max-width: 100%;
+    }
+
+    .filter-btn {
+        padding: 5px 10px;
+        font-size: 11px;
+    }
+
+    /* === TABLE === */
+    .table-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
     .data-table th,
     .data-table td {
-        padding: var(--space-sm) var(--space-md);
+        padding: var(--space-sm) var(--space-sm);
+        font-size: 12px;
     }
 
     .data-table th:first-child,
@@ -1128,11 +1283,20 @@ body {
         padding-right: var(--space-base);
     }
 
-    .nav-tab {
-        padding: 6px 12px;
-        font-size: var(--font-size-xs);
+    .rank-text {
+        font-size: 12px;
     }
 
+    .name-full {
+        font-size: 12px;
+    }
+
+    .status-select {
+        min-width: 130px;
+        font-size: 12px;
+    }
+
+    /* === FOOTER === */
     .page-footer {
         flex-direction: column;
         align-items: stretch;
@@ -1152,101 +1316,112 @@ body {
         flex: 1;
     }
 
-    .status-select {
-        min-width: 140px;
+    /* === BATCH BAR === */
+    .batch-bar {
+        left: 16px;
+        right: 16px;
+        width: auto;
+        transform: translateX(0) translateY(100px);
     }
 
-    /* Hide some columns on mobile */
-    .hide-mobile {
-        display: none;
-    }
-
-    /* ซ่อนข้อความใน Storage Indicator บางส่วน */
-    #storageIndicator {
-        font-size: 10px;
-    }
-
-    /* ลดขนาด user info */
-    .user-info-badge {
-        font-size: 9px;
-        padding: 2px 8px;
-    }
-
-    .user-info-name {
-        font-size: 11px;
-        max-width: 100px;
+    .batch-bar.visible {
+        transform: translateX(0) translateY(0);
     }
 }
 
 @media (max-width: 480px) {
-    .stats-row {
-        grid-template-columns: 1fr 1fr;
+    /* === HEADER - 2 row layout === */
+    .top-header {
+        padding: 4px 0;
     }
 
     .top-header-inner {
-        padding: 0 var(--space-base);
-        gap: 8px;
+        padding: 0 var(--space-sm);
+        gap: 4px;
+        flex-wrap: wrap;
     }
 
-    /* ลด font-size ของ header */
+    .header-left {
+        gap: 6px;
+        flex: 1 1 auto;
+        min-width: 0;
+        order: 1;
+    }
+
     .top-header-title {
-        font-size: 13px;
+        font-size: 12px;
     }
 
     .top-header-unit {
-        font-size: 10px;
-    }
-
-    /* ปรับ Page Title ให้พอดี */
-    .page-title {
-        font-size: 18px;
-        line-height: 1.3;
-    }
-
-    .page-subtitle {
-        font-size: 11px;
-    }
-
-    /* ปรับ Stats card ให้กระทัดรัด */
-    .stat-label {
-        font-size: 10px;
-    }
-
-    .stat-value {
-        font-size: 18px;
-    }
-
-    .stat-detail {
         font-size: 9px;
+        padding: 1px 6px;
     }
 
-    /* ซ่อน Storage text เหลือแค่ icon */
-    #storageIndicator span {
-        display: none;
+    .header-right {
+        gap: 4px;
+        order: 2;
+        flex-shrink: 0;
+    }
+
+    .header-user-info .user-info-badge {
+        font-size: 8px;
+        padding: 1px 5px;
+    }
+
+    .header-user-info .user-info-name {
+        max-width: 70px;
+        font-size: 10px;
+    }
+
+    .header-user-info .btn-icon {
+        width: 26px;
+        height: 26px;
+    }
+
+    /* Compact indicators */
+    .header-indicators {
+        gap: 4px;
     }
 
     #storageIndicator {
-        padding: 4px 8px;
-        min-width: auto;
+        font-size: 9px;
+        padding: 2px 6px;
     }
 
-    /* ซ่อน Connection status text */
+    /* Hide text, keep icon in storage indicator */
+    #storageIndicator span:last-child {
+        display: none;
+    }
+
+    .connection-status {
+        font-size: 9px;
+        gap: 3px;
+    }
+
+    /* Hide connection text, keep dot */
     .connection-status span:not(.connection-dot) {
         display: none;
     }
 
     .connection-status {
         min-width: auto;
+    }
+
+    .header-actions .btn-icon {
+        width: 28px;
+        height: 28px;
+    }
+
+    .header-actions .btn-icon svg {
+        width: 14px;
+        height: 14px;
+    }
+
+    /* === NAVIGATION === */
+    .nav-tabs {
         gap: 0;
     }
 
-    /* ปรับ user info badge */
-    .user-info-badge {
-        font-size: 8px;
-        padding: 2px 6px;
-    }
-
-    /* ปรับ navigation tabs */
     .nav-tab {
         padding: 5px 8px;
         font-size: 10px;
@@ -1255,17 +1430,103 @@ body {
     .nav-tab-badge {
         font-size: 9px;
         padding: 1px 4px;
+        min-width: 16px;
     }
 
-    /* ปรับ filter buttons */
-    .filter-btn {
-        padding: 6px 10px;
+    /* === PAGE HEADER === */
+    .page-header {
+        margin-bottom: 12px;
+    }
+
+    .page-title {
+        font-size: 16px;
+        line-height: 1.3;
+    }
+
+    .page-subtitle {
         font-size: 11px;
     }
 
-    /* ปรับ table */
-    .data-table {
+    /* === STATS === */
+    .stats-row {
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+        margin-bottom: 12px;
+    }
+
+    .stat-card {
+        padding: var(--space-sm) var(--space-base);
+    }
+
+    .stat-label {
+        font-size: 10px;
+        margin-bottom: 2px;
+    }
+
+    .stat-value {
+        font-size: 16px;
+        margin-bottom: 2px;
+    }
+
+    .stat-detail {
+        font-size: 9px;
+    }
+
+    /* === PROGRESS === */
+    .progress-section {
+        margin-bottom: 12px;
+    }
+
+    .progress-header {
+        font-size: 11px;
+    }
+
+    /* === TOOLBAR === */
+    .toolbar {
+        gap: var(--space-xs);
+    }
+
+    .toolbar-right {
+        flex-wrap: wrap;
+        gap: var(--space-xs);
+    }
+
+    .filter-btn {
+        padding: 4px 8px;
+        font-size: 10px;
+    }
+
+    .search-input {
+        height: 32px;
         font-size: 12px;
+    }
+
+    /* === TABLE === */
+    .table-container {
+        border-radius: var(--radius-md);
+    }
+
+    .data-table {
+        font-size: 11px;
+    }
+
+    .data-table th,
+    .data-table td {
+        padding: 6px 5px;
+    }
+
+    .data-table th:first-child,
+    .data-table td:first-child {
+        padding-left: 8px;
+    }
+
+    .data-table th:last-child,
+    .data-table td:last-child {
+        padding-right: 8px;
+    }
+
+    .data-table th {
+        font-size: 10px;
     }
 
     .rank-text {
@@ -1273,53 +1534,65 @@ body {
     }
 
     .name-full {
-        font-size: 12px;
+        font-size: 11px;
     }
 
     .status-select {
-        font-size: 11px;
-        min-width: 120px;
+        font-size: 10px;
+        min-width: 100px;
+        padding: 4px 6px;
+        height: 28px;
     }
 
-    /* ปรับ buttons */
+    .status-badge {
+        font-size: 10px;
+        padding: 2px 8px;
+    }
+
+    /* === BUTTONS === */
     .btn {
-        padding: 7px 12px;
+        padding: 6px 10px;
         font-size: 11px;
     }
 
     .btn-icon {
-        width: 32px;
-        height: 32px;
+        width: 30px;
+        height: 30px;
     }
 
     .btn-icon svg {
+        width: 15px;
+        height: 15px;
+    }
+
+    /* === FOOTER === */
+    .footer-info {
+        gap: var(--space-sm);
+        font-size: 11px;
+    }
+
+    .footer-actions .btn {
+        font-size: 11px;
+        padding: 6px 8px;
+    }
+
+    /* === BATCH BAR === */
+    .batch-bar {
+        left: 8px;
+        right: 8px;
+        padding: var(--space-sm) var(--space-base);
+        font-size: 12px;
+    }
+
+    /* === CHECKBOX === */
+    .checkbox-custom {
         width: 16px;
         height: 16px;
     }
 
-    .batch-bar {
-        left: 16px;
-        right: 16px;
-        transform: translateX(0) translateY(100px);
-        width: auto;
-    }
-
-    .batch-bar.visible {
-        transform: translateX(0) translateY(0);
-    }
-
-    /* ลด gap ระหว่างส่วนต่างๆ */
-    .page-header {
-        margin-bottom: 16px;
-    }
-
-    .stats-row {
-        gap: 6px;
-        margin-bottom: 16px;
-    }
-
-    .progress-section {
-        margin-bottom: 16px;
+    .checkbox-custom svg {
+        width: 10px;
+        height: 10px;
     }
 }
 
@@ -1836,7 +2109,9 @@ body {
 
 @media (max-width: 768px) {
     .login-container {
-        padding: 28px 20px 20px;
+        padding: 24px 16px 16px;
+        margin: var(--space-md);
+        max-width: calc(100vw - 32px);
     }
 
     .login-logo {
@@ -1844,11 +2119,63 @@ body {
     }
 
     .login-personnel-list {
-        max-height: 320px;
+        max-height: 300px;
     }
 
-    .user-info-name {
-        display: none;
+    .login-personnel-item {
+        padding: 10px 12px;
+        font-size: 13px;
+    }
+
+    /* Auth verify badges compact */
+    .verify-badge {
+        font-size: 10px;
+        padding: 2px 6px;
+    }
+
+    .verify-time {
+        font-size: 9px;
+    }
+
+    .me-tag {
+        font-size: 9px;
+        padding: 1px 5px;
+    }
+
+    .audit-modal {
+        max-height: 90vh;
+        border-radius: var(--radius-lg);
+        margin: var(--space-md);
+    }
+
+    .audit-table th,
+    .audit-table td {
+        padding: 6px 10px;
+        font-size: 11px;
+    }
+}
+
+@media (max-width: 480px) {
+    .login-container {
+        padding: 20px 14px 14px;
+        margin: var(--space-sm);
+    }
+
+    .login-logo {
+        font-size: 18px;
+    }
+
+    .login-title {
+        font-size: 14px;
+    }
+
+    .login-personnel-list {
+        max-height: 260px;
+    }
+
+    .login-personnel-item {
+        padding: 8px 10px;
+        font-size: 12px;
     }
 
     .verify-badge span {
@@ -1859,12 +2186,11 @@ body {
         margin: 0;
     }
 
-    .audit-modal {
-        max-height: 90vh;
-        border-radius: var(--radius-lg);
-    }
-
     .me-tag {
         display: none;
+    }
+
+    .audit-modal {
+        margin: var(--space-xs);
     }
 }

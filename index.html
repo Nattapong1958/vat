@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ระบบยืนยันการยื่นภาษี ภ.ง.ด. 90/91 | ร.19 พัน.1</title>
+    <title>ระบบยืนยันการยื่นภาษี ภ.ง.ด. 90/91 </title>
 
     <!-- Preconnect -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -95,31 +95,35 @@
     <!-- ===== TOP HEADER ===== -->
     <header class="top-header">
         <div class="top-header-inner">
-            <div style="display: flex; align-items: center; gap: 16px;">
+            <div class="header-left">
                 <div class="top-header-title">ระบบยืนยันการยื่นภาษี</div>
                 <div class="top-header-unit">ภ.ง.ด. 90/91</div>
             </div>
-            <div style="display: flex; align-items: center; gap: 12px;">
-                <div id="userInfo" style="display:none; align-items: center; gap: 8px;"></div>
-                <div class="connection-status" id="storageIndicator" style="font-size: 11px; gap: 6px;">
-                    <!-- Updated by JS -->
+            <div class="header-right">
+                <div id="userInfo" class="header-user-info"></div>
+                <div class="header-indicators">
+                    <div class="connection-status" id="storageIndicator">
+                        <!-- Updated by JS -->
+                    </div>
+                    <div class="connection-status">
+                        <span class="connection-dot" id="connectionDot"></span>
+                        <span id="connectionText">Online</span>
+                    </div>
                 </div>
-                <div class="connection-status">
-                    <span class="connection-dot" id="connectionDot"></span>
-                    <span id="connectionText">Online</span>
+                <div class="header-actions">
+                    <button class="btn-icon" onclick="app.exportAllData()" title="Export ทั้งหมด">
+                        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                                d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/>
+                        </svg>
+                    </button>
+                    <button class="btn-icon" onclick="app.showAuditLog()" title="ประวัติการใช้งาน">
+                        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                                d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                    </button>
                 </div>
-                <button class="btn-icon" onclick="app.exportAllData()" title="Export ทั้งหมด">
-                    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
-                            d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/>
-                    </svg>
-                </button>
-                <button class="btn-icon" onclick="app.showAuditLog()" title="ประวัติการใช้งาน">
-                    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
-                            d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                    </svg>
-                </button>
             </div>
         </div>
     </header>
@@ -171,19 +175,21 @@
                     </div>
 
                     <!-- Filter -->
-                    <div class="filter-group">
-                        <button class="filter-btn active" data-filter="all" onclick="app.setFilter('all')">
-                            ทั้งหมด
-                        </button>
-                        <button class="filter-btn" data-filter="filed" onclick="app.setFilter('filed')">
-                            ยื่นแล้ว
-                        </button>
-                        <button class="filter-btn" data-filter="not-filed" onclick="app.setFilter('not-filed')">
-                            ยังไม่ยื่น
-                        </button>
-                        <button class="filter-btn" data-filter="pending" onclick="app.setFilter('pending')">
-                            รอดำเนินการ
-                        </button>
+                    <div class="filter-group-wrapper">
+                        <div class="filter-group">
+                            <button class="filter-btn active" data-filter="all" onclick="app.setFilter('all')">
+                                ทั้งหมด
+                            </button>
+                            <button class="filter-btn" data-filter="filed" onclick="app.setFilter('filed')">
+                                ยื่นแล้ว
+                            </button>
+                            <button class="filter-btn" data-filter="not-filed" onclick="app.setFilter('not-filed')">
+                                ยังไม่ยื่น
+                            </button>
+                            <button class="filter-btn" data-filter="pending" onclick="app.setFilter('pending')">
+                                รอดำเนินการ
+                            </button>
+                        </div>
                     </div>
                 </div>
 
