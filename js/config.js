@@ -8,7 +8,7 @@ const CONFIG = {
     APPS_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbxxQy5ZHuUy_UoAnferxhzsF1eUJpgB_gQMhs3eumDOGE2bW1liDGxuHsl_qw1GACkX8A/exec',
 
     // Google Sheets ID (สำหรับ direct API - optional)
-    SHEET_ID: '',
+    SHEET_ID: '15Ti8w2twHK2EwmtcFH4RgF3Nfk0hfms1iguaw42l8a8',
 
     // Google API Key (สำหรับ direct API - optional)
     API_KEY: '',
@@ -23,7 +23,7 @@ const CONFIG = {
     },
 
     // ใช้ข้อมูล Local (ถ้ายังไม่ได้เชื่อมต่อ Google Sheets)
-    USE_LOCAL_DATA: true,
+    USE_LOCAL_DATA: false,
 
     // Auto-save interval (ms)
     AUTO_SAVE_INTERVAL: 30000,
