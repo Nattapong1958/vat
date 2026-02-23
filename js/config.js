@@ -5,7 +5,7 @@
 const CONFIG = {
     // Google Apps Script Web App URL
     // ให้นำ URL ที่ได้จากการ Deploy Apps Script มาใส่ที่นี่
-    APPS_SCRIPT_URL: '',
+    APPS_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbxxQy5ZHuUy_UoAnferxhzsF1eUJpgB_gQMhs3eumDOGE2bW1liDGxuHsl_qw1GACkX8A/exec',
 
     // Google Sheets ID (สำหรับ direct API - optional)
     SHEET_ID: '',
