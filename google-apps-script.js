@@ -1,169 +1,988 @@
 // ============================================================
-// Google Apps Script - สำหรับ Deploy เป็น Web App
+// Google Apps Script - ระบบยืนยันการยื่นภาษี ภ.ง.ด. 90/91
 // ============================================================
-// วิธีใช้งาน:
-// 1. ไปที่ https://script.google.com
-// 2. สร้างโปรเจคใหม่
-// 3. คัดลอกโค้ดนี้ไปวาง
-// 4. แก้ไข SPREADSHEET_ID ให้เป็น ID ของ Google Sheet ที่สร้างไว้
-// 5. Deploy > New deployment > Web app
+// 📋 ขั้นตอนการ Deploy:
+// 
+// 1. ไปที่ https://script.google.com → สร้างโปรเจคใหม่
+// 2. คัดลอกโค้ดทั้งหมดนี้ไปวางแทนที่โค้ดเดิม
+// 3. บันทึกโปรเจกต์ (Ctrl+S)
+// 4. รันฟังก์ชัน "fullSetup" ครั้งแรก:
+//    - คลิก dropdown เลือก "fullSetup"
+//    - คลิกปุ่ม Run (▶)
+//    - อนุญาตสิทธิ์เข้าถึง Google Sheet
+// 5. Deploy > New deployment:
+//    - Type: Web app
+//    - Description: "VAT Tax System v1.0"
 //    - Execute as: Me
 //    - Who has access: Anyone
-// 6. คัดลอก URL ที่ได้ไปใส่ในไฟล์ config.js (APPS_SCRIPT_URL)
+// 6. คลิก Deploy → คัดลอก URL ที่ได้
+// 7. นำ URL ไปใส่ใน js/config.js (APPS_SCRIPT_URL)
+// 
 // ============================================================
 
-// ===== ตั้งค่า =====
-const SPREADSHEET_ID = 'YOUR_SPREADSHEET_ID_HERE';
+// ===== CONFIGURATION =====
+const SPREADSHEET_ID = '15Ti8w2twHK2EwmtcFH4RgF3Nfk0hfms1iguaw42l8a8';
 
-// ชื่อ Sheet ที่ต้องสร้างใน Google Sheets (5 sheets)
+// Sheet names - ตรงกับ config.js
 const SHEET_NAMES = {
-    'นายทหารสัญญาบัตร': 'นายทหารสัญญาบัตร',
-    'ร้อย.1': 'ร้อย.1',
-    'ร้อย.อวบ.2': 'ร้อย.อวบ.2',
-    'ร้อย.อวบ.3': 'ร้อย.อวบ.3',
-    'ร้อย.บก.': 'ร้อย.บก.'
+  page1: 'นายทหารสัญญาบัตร',
+  page2: 'ร้อย.1',
+  page3: 'ร้อย.อวบ.2',
+  page4: 'ร้อย.อวบ.3',
+  page5: 'ร้อย.บก.'
 };
 
-// ===== HTTP GET Handler =====
+// Audit log sheet
+const AUDIT_SHEET_NAME = 'AuditLog';
+
+// Column headers for personnel sheets
+const PERSONNEL_HEADERS = [
+  'id',
+  'rank', 
+  'firstName',
+  'lastName',
+  'taxStatus',
+  'verifiedBy',
+  'verifiedAt',
+  'verifyType'
+];
+
+// Column headers for audit log
+const AUDIT_HEADERS = [
+  'timestamp',
+  'action',
+  'userId',
+  'userName',
+  'targetId',
+  'targetName',
+  'oldValue',
+  'newValue',
+  'verifyType',
+  'ipAddress',
+  'userAgent'
+];
+
+// ============================================================
+// HTTP HANDLERS
+// ============================================================
+
+/**
+ * Handle GET requests
+ */
 function doGet(e) {
-    const action = e.parameter.action;
+  try {
+    const action = e.parameter.action || 'ping';
+    let result;
+    
+    switch (action) {
+      case 'ping':
+        result = { 
+          status: 'ok', 
+          message: 'Connected to VAT Tax System',
+          timestamp: new Date().toISOString(),
+          version: '1.0'
+        };
+        break;
+        
+      case 'getData':
+        const pageKey = e.parameter.page || e.parameter.sheet;
+        result = getPageData(pageKey);
+        break;
+        
+      case 'getAllData':
+        result = getAllData();
+        break;
+        
+      case 'getAuditLog':
+        const limit = parseInt(e.parameter.limit) || 100;
+        result = getAuditLog(limit);
+        break;
 
-    try {
-        switch (action) {
-            case 'ping':
-                return jsonResponse({ status: 'ok', message: 'Connected' });
-
-            case 'getData':
-                const sheetName = e.parameter.sheet;
-                const data = getSheetData(sheetName);
-                return jsonResponse({ status: 'ok', data: data });
-
-            case 'getAllData':
-                const allData = {};
-                Object.keys(SHEET_NAMES).forEach(name => {
-                    allData[name] = getSheetData(name);
-                });
-                return jsonResponse({ status: 'ok', data: allData });
-
-            default:
-                return jsonResponse({ status: 'error', message: 'Unknown action' });
-        }
-    } catch (error) {
-        return jsonResponse({ status: 'error', message: error.message });
+      case 'getStats':
+        result = { status: 'ok', data: getStatistics() };
+        break;
+        
+      default:
+        result = { status: 'error', message: 'Unknown action: ' + action };
     }
+    
+    return createJsonResponse(result);
+    
+  } catch (error) {
+    return createJsonResponse({ 
+      status: 'error', 
+      message: error.message,
+      stack: error.stack 
+    });
+  }
 }
 
-// ===== HTTP POST Handler =====
+/**
+ * Handle POST requests
+ */
 function doPost(e) {
-    try {
-        const body = JSON.parse(e.postData.contents);
-        const action = body.action;
-
-        switch (action) {
-            case 'updateStatus':
-                updatePersonStatus(body.sheet, body.id, body.status);
-                return jsonResponse({ status: 'ok' });
-
-            case 'batchUpdate':
-                batchUpdateStatus(body.sheet, body.updates);
-                return jsonResponse({ status: 'ok' });
-
-            default:
-                return jsonResponse({ status: 'error', message: 'Unknown action' });
-        }
-    } catch (error) {
-        return jsonResponse({ status: 'error', message: error.message });
+  try {
+    const body = JSON.parse(e.postData.contents);
+    const action = body.action || '';
+    let result;
+    
+    switch (action) {
+      case 'updateStatus':
+        result = updatePersonStatus(body);
+        break;
+        
+      case 'batchUpdate':
+        result = batchUpdateStatus(body);
+        break;
+        
+      case 'syncData':
+        result = syncAllData(body);
+        break;
+        
+      case 'addAuditLog':
+        result = addAuditLogEntry(body);
+        break;
+        
+      case 'clearAuditLog':
+        result = clearAuditLog();
+        break;
+        
+      default:
+        result = { status: 'error', message: 'Unknown action: ' + action };
     }
+    
+    return createJsonResponse(result);
+    
+  } catch (error) {
+    return createJsonResponse({ 
+      status: 'error', 
+      message: error.message,
+      stack: error.stack 
+    });
+  }
 }
 
-// ===== Helper Functions =====
-
-function jsonResponse(data) {
-    return ContentService
-        .createTextOutput(JSON.stringify(data))
-        .setMimeType(ContentService.MimeType.JSON);
+/**
+ * Create JSON response with CORS headers
+ */
+function createJsonResponse(data) {
+  const output = ContentService.createTextOutput(JSON.stringify(data));
+  output.setMimeType(ContentService.MimeType.JSON);
+  return output;
 }
 
-function getSheetData(sheetName) {
-    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-    const sheet = ss.getSheetByName(sheetName);
-    if (!sheet) return [];
+// ============================================================
+// DATA RETRIEVAL FUNCTIONS
+// ============================================================
 
-    const data = sheet.getDataRange().getValues();
-    if (data.length <= 1) return []; // Header only
-
-    const headers = data[0];
-    const idCol = headers.indexOf('id');
-    const rankCol = headers.indexOf('rank');
-    const firstNameCol = headers.indexOf('firstName');
-    const lastNameCol = headers.indexOf('lastName');
-    const statusCol = headers.indexOf('taxStatus');
-
-    return data.slice(1).map(row => ({
-        id: row[idCol] || '',
-        rank: row[rankCol] || '',
-        firstName: row[firstNameCol] || '',
-        lastName: row[lastNameCol] || '',
-        taxStatus: row[statusCol] || ''
-    }));
-}
-
-function updatePersonStatus(sheetName, personId, status) {
-    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-    const sheet = ss.getSheetByName(sheetName);
-    if (!sheet) return;
-
-    const data = sheet.getDataRange().getValues();
-    const headers = data[0];
-    const idCol = headers.indexOf('id');
-    const statusCol = headers.indexOf('taxStatus');
-
-    for (let i = 1; i < data.length; i++) {
-        if (data[i][idCol] === personId) {
-            sheet.getRange(i + 1, statusCol + 1).setValue(status);
-            break;
-        }
+/**
+ * Get data for a specific page/sheet
+ */
+function getPageData(pageKey) {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheetName = SHEET_NAMES[pageKey] || pageKey;
+  const sheet = ss.getSheetByName(sheetName);
+  
+  if (!sheet) {
+    return { status: 'error', message: 'Sheet not found: ' + sheetName };
+  }
+  
+  const data = sheet.getDataRange().getValues();
+  if (data.length <= 1) {
+    return { status: 'ok', data: { personnel: [] } };
+  }
+  
+  const headers = data[0];
+  const personnel = [];
+  
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    const person = {};
+    
+    headers.forEach((header, idx) => {
+      let value = row[idx];
+      // Convert dates to ISO string
+      if (value instanceof Date) {
+        value = value.toISOString();
+      }
+      person[header] = value !== undefined && value !== null ? value : '';
+    });
+    
+    // Only add if has valid id
+    if (person.id) {
+      personnel.push(person);
     }
+  }
+  
+  return {
+    status: 'ok',
+    data: {
+      personnel: personnel,
+      lastUpdated: new Date().toISOString()
+    }
+  };
 }
 
-function batchUpdateStatus(sheetName, updates) {
-    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-    const sheet = ss.getSheetByName(sheetName);
-    if (!sheet) return;
+/**
+ * Get all data from all sheets
+ */
+function getAllData() {
+  const allData = {};
+  
+  Object.keys(SHEET_NAMES).forEach(pageKey => {
+    const result = getPageData(pageKey);
+    if (result.status === 'ok') {
+      allData[pageKey] = result.data;
+    }
+  });
+  
+  return {
+    status: 'ok',
+    data: allData,
+    timestamp: new Date().toISOString()
+  };
+}
 
-    const data = sheet.getDataRange().getValues();
-    const headers = data[0];
-    const idCol = headers.indexOf('id');
-    const statusCol = headers.indexOf('taxStatus');
+/**
+ * Get audit log entries
+ */
+function getAuditLog(limit) {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = ss.getSheetByName(AUDIT_SHEET_NAME);
+  
+  if (!sheet) {
+    return { status: 'ok', data: [] };
+  }
+  
+  const data = sheet.getDataRange().getValues();
+  if (data.length <= 1) {
+    return { status: 'ok', data: [] };
+  }
+  
+  const headers = data[0];
+  const logs = [];
+  
+  // Get most recent entries (reverse order)
+  const startRow = Math.max(1, data.length - limit);
+  
+  for (let i = data.length - 1; i >= startRow; i--) {
+    const row = data[i];
+    const entry = {};
+    
+    headers.forEach((header, idx) => {
+      let value = row[idx];
+      if (value instanceof Date) {
+        value = value.toISOString();
+      }
+      entry[header] = value || '';
+    });
+    
+    logs.push(entry);
+  }
+  
+  return {
+    status: 'ok',
+    data: logs
+  };
+}
 
-    updates.forEach(update => {
+// ============================================================
+// DATA UPDATE FUNCTIONS
+// ============================================================
+
+/**
+ * Update a single person's status
+ */
+function updatePersonStatus(params) {
+  const { page, sheet, id, status, verifiedBy, verifiedAt, verifyType } = params;
+  const pageKey = page || sheet;
+  
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheetName = SHEET_NAMES[pageKey] || pageKey;
+  const sheetObj = ss.getSheetByName(sheetName);
+  
+  if (!sheetObj) {
+    return { status: 'error', message: 'Sheet not found: ' + sheetName };
+  }
+  
+  const data = sheetObj.getDataRange().getValues();
+  const headers = data[0];
+  
+  // Find column indices
+  const idCol = headers.indexOf('id');
+  const statusCol = headers.indexOf('taxStatus');
+  const verifiedByCol = headers.indexOf('verifiedBy');
+  const verifiedAtCol = headers.indexOf('verifiedAt');
+  const verifyTypeCol = headers.indexOf('verifyType');
+  
+  // Find the row with matching id
+  let rowIndex = -1;
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][idCol]) === String(id)) {
+      rowIndex = i + 1; // 1-based for sheet
+      break;
+    }
+  }
+  
+  if (rowIndex === -1) {
+    return { status: 'error', message: 'Person not found: ' + id };
+  }
+  
+  // Update values in a batch for efficiency
+  const updates = [];
+  
+  if (statusCol !== -1) {
+    updates.push({ row: rowIndex, col: statusCol + 1, value: status || '' });
+  }
+  if (verifiedByCol !== -1 && verifiedBy !== undefined) {
+    updates.push({ row: rowIndex, col: verifiedByCol + 1, value: verifiedBy || '' });
+  }
+  if (verifiedAtCol !== -1) {
+    updates.push({ row: rowIndex, col: verifiedAtCol + 1, value: verifiedAt || new Date().toISOString() });
+  }
+  if (verifyTypeCol !== -1 && verifyType !== undefined) {
+    updates.push({ row: rowIndex, col: verifyTypeCol + 1, value: verifyType || '' });
+  }
+  
+  // Apply updates
+  updates.forEach(u => {
+    sheetObj.getRange(u.row, u.col).setValue(u.value);
+  });
+  
+  return { 
+    status: 'ok', 
+    message: 'Updated successfully',
+    id: id,
+    timestamp: new Date().toISOString()
+  };
+}
+
+/**
+ * Batch update multiple persons' status
+ */
+function batchUpdateStatus(params) {
+  const { page, sheet, updates } = params;
+  const pageKey = page || sheet;
+  
+  if (!updates || !Array.isArray(updates) || updates.length === 0) {
+    return { status: 'error', message: 'No updates provided' };
+  }
+  
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheetName = SHEET_NAMES[pageKey] || pageKey;
+  const sheetObj = ss.getSheetByName(sheetName);
+  
+  if (!sheetObj) {
+    return { status: 'error', message: 'Sheet not found: ' + sheetName };
+  }
+  
+  const data = sheetObj.getDataRange().getValues();
+  const headers = data[0];
+  
+  // Find column indices
+  const idCol = headers.indexOf('id');
+  const statusCol = headers.indexOf('taxStatus');
+  const verifiedByCol = headers.indexOf('verifiedBy');
+  const verifiedAtCol = headers.indexOf('verifiedAt');
+  const verifyTypeCol = headers.indexOf('verifyType');
+  
+  // Create id to row mapping
+  const idToRow = {};
+  for (let i = 1; i < data.length; i++) {
+    idToRow[String(data[i][idCol])] = i + 1;
+  }
+  
+  let successCount = 0;
+  let failedIds = [];
+  
+  // Process each update
+  updates.forEach(update => {
+    const rowIndex = idToRow[String(update.id)];
+    if (rowIndex) {
+      if (statusCol !== -1) {
+        sheetObj.getRange(rowIndex, statusCol + 1).setValue(update.status || '');
+      }
+      if (verifiedByCol !== -1 && update.verifiedBy) {
+        sheetObj.getRange(rowIndex, verifiedByCol + 1).setValue(update.verifiedBy);
+      }
+      if (verifiedAtCol !== -1) {
+        sheetObj.getRange(rowIndex, verifiedAtCol + 1).setValue(update.verifiedAt || new Date().toISOString());
+      }
+      if (verifyTypeCol !== -1 && update.verifyType) {
+        sheetObj.getRange(rowIndex, verifyTypeCol + 1).setValue(update.verifyType);
+      }
+      successCount++;
+    } else {
+      failedIds.push(update.id);
+    }
+  });
+  
+  return {
+    status: 'ok',
+    message: `Updated ${successCount} of ${updates.length} records`,
+    successCount: successCount,
+    failedIds: failedIds,
+    timestamp: new Date().toISOString()
+  };
+}
+
+/**
+ * Sync all data from client (full sync from LocalStorage)
+ */
+function syncAllData(params) {
+  const { data } = params;
+  
+  if (!data) {
+    return { status: 'error', message: 'No data provided' };
+  }
+  
+  let syncedPages = [];
+  let totalUpdates = 0;
+  
+  Object.keys(data).forEach(pageKey => {
+    const pageData = data[pageKey];
+    if (pageData && pageData.personnel) {
+      pageData.personnel.forEach(person => {
+        if (person.id && person.taxStatus) {
+          const result = updatePersonStatus({
+            page: pageKey,
+            id: person.id,
+            status: person.taxStatus,
+            verifiedBy: person.verifiedBy,
+            verifiedAt: person.verifiedAt,
+            verifyType: person.verifyType
+          });
+          if (result.status === 'ok') {
+            totalUpdates++;
+          }
+        }
+      });
+      syncedPages.push(pageKey);
+    }
+  });
+  
+  return {
+    status: 'ok',
+    message: `Synced ${syncedPages.length} pages with ${totalUpdates} updates`,
+    syncedPages: syncedPages,
+    totalUpdates: totalUpdates,
+    timestamp: new Date().toISOString()
+  };
+}
+
+// ============================================================
+// AUDIT LOG FUNCTIONS
+// ============================================================
+
+/**
+ * Add entry to audit log
+ */
+function addAuditLogEntry(params) {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  let sheet = ss.getSheetByName(AUDIT_SHEET_NAME);
+  
+  // Create sheet if not exists
+  if (!sheet) {
+    sheet = ss.insertSheet(AUDIT_SHEET_NAME);
+    sheet.getRange(1, 1, 1, AUDIT_HEADERS.length).setValues([AUDIT_HEADERS]);
+    sheet.getRange(1, 1, 1, AUDIT_HEADERS.length)
+      .setFontWeight('bold')
+      .setBackground('#fff3cd');
+  }
+  
+  const entry = [
+    params.timestamp || new Date().toISOString(),
+    params.action || '',
+    params.userId || '',
+    params.userName || '',
+    params.targetId || '',
+    params.targetName || '',
+    params.oldValue || '',
+    params.newValue || '',
+    params.verifyType || '',
+    params.ipAddress || '',
+    params.userAgent || ''
+  ];
+  
+  sheet.appendRow(entry);
+  
+  // Keep only last 1000 entries
+  const lastRow = sheet.getLastRow();
+  if (lastRow > 1001) {
+    sheet.deleteRows(2, lastRow - 1001);
+  }
+  
+  return { status: 'ok', message: 'Audit log entry added' };
+}
+
+/**
+ * Clear audit log
+ */
+function clearAuditLog() {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = ss.getSheetByName(AUDIT_SHEET_NAME);
+  
+  if (sheet) {
+    const lastRow = sheet.getLastRow();
+    if (lastRow > 1) {
+      sheet.deleteRows(2, lastRow - 1);
+    }
+  }
+  
+  return { status: 'ok', message: 'Audit log cleared' };
+}
+
+// ============================================================
+// STATISTICS FUNCTIONS
+// ============================================================
+
+/**
+ * Get statistics for all pages
+ */
+function getStatistics() {
+  const stats = {
+    total: 0,
+    filed: 0,
+    notFiled: 0,
+    pending: 0,
+    byPage: {}
+  };
+  
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  
+  Object.keys(SHEET_NAMES).forEach(pageKey => {
+    const sheet = ss.getSheetByName(SHEET_NAMES[pageKey]);
+    if (sheet) {
+      const data = sheet.getDataRange().getValues();
+      if (data.length > 1) {
+        const headers = data[0];
+        const statusCol = headers.indexOf('taxStatus');
+        
+        let pageFiled = 0;
+        let pageNotFiled = 0;
+        let pagePending = 0;
+        
         for (let i = 1; i < data.length; i++) {
-            if (data[i][idCol] === update.id) {
-                sheet.getRange(i + 1, statusCol + 1).setValue(update.status);
-                break;
-            }
+          const status = data[i][statusCol];
+          if (status === 'ดำเนินการยื่นภาษีแล้ว') {
+            pageFiled++;
+          } else if (status === 'ยังไม่ยื่น') {
+            pageNotFiled++;
+          } else {
+            pagePending++;
+          }
         }
-    });
+        
+        const pageTotal = data.length - 1;
+        stats.byPage[pageKey] = {
+          name: SHEET_NAMES[pageKey],
+          total: pageTotal,
+          filed: pageFiled,
+          notFiled: pageNotFiled,
+          pending: pagePending,
+          progress: pageTotal > 0 ? Math.round((pageFiled / pageTotal) * 100) : 0
+        };
+        
+        stats.total += pageTotal;
+        stats.filed += pageFiled;
+        stats.notFiled += pageNotFiled;
+        stats.pending += pagePending;
+      }
+    }
+  });
+  
+  stats.progress = stats.total > 0 ? Math.round((stats.filed / stats.total) * 100) : 0;
+  
+  return stats;
 }
 
-// ===== Setup Function =====
-// เรียกฟังก์ชันนี้ครั้งแรกเพื่อสร้าง Sheet และ Header
+// ============================================================
+// SETUP FUNCTIONS - รันครั้งแรกเพื่อเตรียม Sheets
+// ============================================================
+
+/**
+ * Setup all sheets structure
+ */
 function setupSheets() {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  
+  // Create personnel sheets
+  Object.entries(SHEET_NAMES).forEach(([pageKey, sheetName]) => {
+    let sheet = ss.getSheetByName(sheetName);
+    
+    if (!sheet) {
+      sheet = ss.insertSheet(sheetName);
+      Logger.log('✅ Created sheet: ' + sheetName);
+    } else {
+      Logger.log('📋 Sheet exists: ' + sheetName);
+    }
+    
+    // Set headers
+    sheet.getRange(1, 1, 1, PERSONNEL_HEADERS.length).setValues([PERSONNEL_HEADERS]);
+    
+    // Format headers
+    sheet.getRange(1, 1, 1, PERSONNEL_HEADERS.length)
+      .setFontWeight('bold')
+      .setBackground('#f5f5f7')
+      .setHorizontalAlignment('center');
+    
+    // Set column widths
+    sheet.setColumnWidth(1, 80);   // id
+    sheet.setColumnWidth(2, 100);  // rank
+    sheet.setColumnWidth(3, 120);  // firstName
+    sheet.setColumnWidth(4, 140);  // lastName
+    sheet.setColumnWidth(5, 200);  // taxStatus
+    sheet.setColumnWidth(6, 150);  // verifiedBy
+    sheet.setColumnWidth(7, 180);  // verifiedAt
+    sheet.setColumnWidth(8, 100);  // verifyType
+    
+    // Freeze header row
+    sheet.setFrozenRows(1);
+  });
+  
+  // Create audit log sheet
+  let auditSheet = ss.getSheetByName(AUDIT_SHEET_NAME);
+  if (!auditSheet) {
+    auditSheet = ss.insertSheet(AUDIT_SHEET_NAME);
+    Logger.log('✅ Created sheet: ' + AUDIT_SHEET_NAME);
+  }
+  
+  auditSheet.getRange(1, 1, 1, AUDIT_HEADERS.length).setValues([AUDIT_HEADERS]);
+  auditSheet.getRange(1, 1, 1, AUDIT_HEADERS.length)
+    .setFontWeight('bold')
+    .setBackground('#fff3cd');
+  auditSheet.setFrozenRows(1);
+  
+  Logger.log('🎉 Setup complete! All sheets are ready.');
+  return 'Setup complete!';
+}
+
+/**
+ * Import initial personnel data
+ */
+function importInitialData() {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  
+  // ===== PAGE 1: นายทหารสัญญาบัตร (24 คน) =====
+  const page1Data = [
+    ['P1-001', 'พ.ท.', 'เอกพจน์', 'นามถาวร', '', '', '', ''],
+    ['P1-002', 'ร.อ.', 'รัฐเศรษฐ์', 'วงษ์ขันธ์', '', '', '', ''],
+    ['P1-003', 'ร.อ.', 'วิฑูรย์', 'โสขุมา', '', '', '', ''],
+    ['P1-004', 'ร.ต.', 'ณัฐพงค์', 'ตั้งวงค์', '', '', '', ''],
+    ['P1-005', 'ร.อ.', 'อนุชา', 'ม่วงนนทะศรี', '', '', '', ''],
+    ['P1-006', 'ร.ท.', 'พงศกร', 'สร้อยฉวี', '', '', '', ''],
+    ['P1-007', 'ร.ท.', 'ปภพ', 'ศรีสังวาลย์', '', '', '', ''],
+    ['P1-008', 'ร.ท.', 'ณัฐวรรธน์', 'เสือเผือก', '', '', '', ''],
+    ['P1-009', 'ร.ท.', 'ปฏิพัฒน์', 'ชมเจริญ', '', '', '', ''],
+    ['P1-010', 'ร.ต.', 'อนุสรณ์', 'นุ่มไพร', '', '', '', ''],
+    ['P1-011', 'ร.ต.', 'อธิพงษ์', 'ป้องเรือ', '', '', '', ''],
+    ['P1-012', 'ร.ต.', 'สุภเดช', 'ทรงประสพ', '', '', '', ''],
+    ['P1-013', 'ร.ต.', 'กรวิชญ์', 'แสงจันทร์', '', '', '', ''],
+    ['P1-014', 'ร.ต.', 'เอกดนัย', 'ทองกุล', '', '', '', ''],
+    ['P1-015', 'ร.ต.', 'บรรฑูรย์', 'พุ่มพวง', '', '', '', ''],
+    ['P1-016', 'ร.ต.', 'พจน์', 'สิงหพันธุ์', '', '', '', ''],
+    ['P1-017', 'ร.ท.', 'ไชยยันต์', 'จันทวัน', '', '', '', ''],
+    ['P1-018', 'ร.ต.', 'อิทธิพันธ์', 'ทองทิพยา', '', '', '', ''],
+    ['P1-019', 'ร.อ.', 'กรันชัย', 'ภควัฒน์นานนท์', '', '', '', ''],
+    ['P1-020', 'ร.ต.', 'ปวริศ', 'พรพิจิตรทรัพย์', '', '', '', ''],
+    ['P1-021', 'ร.ท.', 'ชัชวาลย์', 'เกวิโก', '', '', '', ''],
+    ['P1-022', 'ร.ท.', 'พลวรรธน์', 'พรมบุตร', '', '', '', ''],
+    ['P1-023', 'ร.อ.', 'สุชาติ', 'สุขสวัสดิ์', '', '', '', ''],
+    ['P1-024', 'ร.ท.', 'สุทธิรักษ์', 'อ้นชู', '', '', '', '']
+  ];
+  
+  importToSheet(ss, SHEET_NAMES.page1, page1Data);
+  
+  // ===== PAGE 2: ร้อย.1 (43 คน) =====
+  const page2Data = [
+    ['P2-001', 'จ.ส.อ.(พ)', 'พิสิษฐ์', 'ช้างเชื้อวงษ์', '', '', '', ''],
+    ['P2-002', 'จ.ส.อ.', 'จักรกฤษ', 'สำเร็จทรัพย์', '', '', '', ''],
+    ['P2-003', 'จ.ส.อ.', 'กัณพัฒน์', 'สัมฤทธิ์ผล', '', '', '', ''],
+    ['P2-004', 'จ.ส.อ.', 'ธนพล', 'ประทุมสูตร', '', '', '', ''],
+    ['P2-005', 'จ.ส.อ.', 'บุญเหนือ', 'บุญสิน', '', '', '', ''],
+    ['P2-006', 'จ.ส.อ.(พ)', 'บุญเยี่ยม', 'โสชาติ', '', '', '', ''],
+    ['P2-007', 'จ.ส.อ.(พ)', 'อภิชัย', 'มุ่งชัย', '', '', '', ''],
+    ['P2-008', 'จ.ส.อ.', 'อาคม', 'สินแจ่ม', '', '', '', ''],
+    ['P2-009', 'จ.ส.อ.', 'บุญรุ่ง', 'ชิวปรีชา', '', '', '', ''],
+    ['P2-010', 'จ.ส.อ.', 'อดิศร', 'แสงศรี', '', '', '', ''],
+    ['P2-011', 'จ.ส.อ.', 'ธันพิพัฒน์', 'โกมลวานิชย์', '', '', '', ''],
+    ['P2-012', 'ส.อ.', 'สันติสุข', 'อุตส่าห์', '', '', '', ''],
+    ['P2-013', 'ส.อ.', 'ไกรวิทย์', 'มาตจรัญ', '', '', '', ''],
+    ['P2-014', 'ส.อ.', 'นครินทร์', 'สังข์ศรี', '', '', '', ''],
+    ['P2-015', 'ส.อ.', 'กิติพงษ์', 'ไชยรินทร์', '', '', '', ''],
+    ['P2-016', 'ส.อ.', 'ธีรศักดิ์', 'ทิมอ่อน', '', '', '', ''],
+    ['P2-017', 'ส.อ.', 'ภูษิต', 'เพ็ชรอาบ', '', '', '', ''],
+    ['P2-018', 'ส.อ.', 'ราเมศวร์', 'ดียิ่ง', '', '', '', ''],
+    ['P2-019', 'ส.อ.', 'รุ่งระวี', 'เอี่ยมอ่ำ', '', '', '', ''],
+    ['P2-020', 'ส.อ.', 'ยุรพงค์', 'แพงสุดใจ', '', '', '', ''],
+    ['P2-021', 'ส.อ.', 'วัชรพงศ์', 'พรพิบาย', '', '', '', ''],
+    ['P2-022', 'ส.อ.', 'สิริชัย', 'ปันคำมา', '', '', '', ''],
+    ['P2-023', 'ส.อ.', 'อภิวัตน์', 'ทองชัยยะ', '', '', '', ''],
+    ['P2-024', 'ส.อ.', 'ปราณนาถ', 'เหมราช', '', '', '', ''],
+    ['P2-025', 'ส.อ.', 'เชาว์วัฒน์', 'ดีจงเจริญ', '', '', '', ''],
+    ['P2-026', 'ส.อ.', 'ชัยวัฒน์', 'ภูวเศรษฐาวร', '', '', '', ''],
+    ['P2-027', 'พลฯ', 'ธารวิทย์', 'สทอนเมือง', '', '', '', ''],
+    ['P2-028', 'พลฯ', 'อรรคพล', 'พ่อค้า', '', '', '', ''],
+    ['P2-029', 'พลฯ', 'อนุวัฒน์', 'ศรีพรหมมา', '', '', '', ''],
+    ['P2-030', 'พลฯ', 'จีรพัฒน์', 'เตชะยศ', '', '', '', ''],
+    ['P2-031', 'พลฯ', 'อดิศักดิ์', 'ศรีสังข์งาม', '', '', '', ''],
+    ['P2-032', 'พลฯ', 'ณัฐนนท์', 'น่าดู', '', '', '', ''],
+    ['P2-033', 'พลฯ', 'ธันวา', 'ทองประกอบ', '', '', '', ''],
+    ['P2-034', 'พลฯ', 'จิรวุฒน์', 'ทำละเอียด', '', '', '', ''],
+    ['P2-035', 'พลฯ', 'วุฒินันท์', 'คำงาม', '', '', '', ''],
+    ['P2-036', 'พลฯ', 'จีรวัฒน์', 'สังหาร', '', '', '', ''],
+    ['P2-037', 'พลฯ', 'โสฬส', 'สุริยทรงกรด', '', '', '', ''],
+    ['P2-038', 'พลฯ', 'นนที', 'จันทร์ยง', '', '', '', ''],
+    ['P2-039', 'พลฯ', 'วีระชัย', 'สุริยะวงค์', '', '', '', ''],
+    ['P2-040', 'พลฯ', 'จักรินทร์', 'ชื่นปรีชา', '', '', '', ''],
+    ['P2-041', 'พลฯ', 'ภาณุวัฒน์', 'ศรีจันทร์', '', '', '', ''],
+    ['P2-042', 'พลฯ', 'สุรนาท', 'คานนิม', '', '', '', ''],
+    ['P2-043', 'พลฯ', 'ศุภณัฐ', 'รัศเสนา', '', '', '', '']
+  ];
+  
+  importToSheet(ss, SHEET_NAMES.page2, page2Data);
+  
+  // ===== PAGE 3: ร้อย.อวบ.2 (43 คน) =====
+  const page3Data = [
+    ['P3-001', 'จ.ส.อ.(พ)', 'วีระ', 'สิทธิชัย', '', '', '', ''],
+    ['P3-002', 'จ.ส.อ.', 'นพดล', 'แพงจันทร์', '', '', '', ''],
+    ['P3-003', 'จ.ส.อ.', 'ศรายุทธ', 'เฮงจันทร์', '', '', '', ''],
+    ['P3-004', 'จ.ส.อ.', 'ณฐพร', 'เทพา', '', '', '', ''],
+    ['P3-005', 'จ.ส.อ.', 'ยุทธภูมิ', 'แก้วภมร', '', '', '', ''],
+    ['P3-006', 'จ.ส.อ.(พ)', 'สมหมาย', 'สุกร', '', '', '', ''],
+    ['P3-007', 'จ.ส.อ.', 'สถาปณ์', 'สว่างจิตร', '', '', '', ''],
+    ['P3-008', 'จ.ส.อ.', 'ประเทือง', 'ปณีตา', '', '', '', ''],
+    ['P3-009', 'จ.ส.อ.', 'พงษ์พันธ์', 'ศรีสงคราม', '', '', '', ''],
+    ['P3-010', 'จ.ส.อ.', 'ศักดิ์ชัย', 'พฤกษาโรจน์กุล', '', '', '', ''],
+    ['P3-011', 'ส.อ.', 'พิชัยยุทธ', 'แสงแก้ว', '', '', '', ''],
+    ['P3-012', 'ส.อ.', 'ศิริทัศน์', 'วังมูล', '', '', '', ''],
+    ['P3-013', 'ส.อ.', 'พีระวัฒน์', 'บุญเกิด', '', '', '', ''],
+    ['P3-014', 'ส.อ.', 'พิเชษฐพงศ์', 'ธรรมโส', '', '', '', ''],
+    ['P3-015', 'ส.อ.', 'ฐนกร', 'อ่ำอำไพ', '', '', '', ''],
+    ['P3-016', 'ส.อ.', 'อิทธิกร', 'น้อยเจริญ', '', '', '', ''],
+    ['P3-017', 'ส.อ.', 'อนันต์', 'ยงยุทธ', '', '', '', ''],
+    ['P3-018', 'ส.อ.', 'สุทัศน์', 'ศรีหัตถ์พร', '', '', '', ''],
+    ['P3-019', 'ส.อ.', 'ศตวรรษ', 'เลาะวิถี', '', '', '', ''],
+    ['P3-020', 'ส.อ.', 'วรวุฒิ', 'จะโรจร', '', '', '', ''],
+    ['P3-021', 'ส.อ.', 'ธีรภัทร', 'กองแก้ว', '', '', '', ''],
+    ['P3-022', 'ส.อ.', 'วัชระ', 'นาน่วม', '', '', '', ''],
+    ['P3-023', 'ส.อ.', 'ณัฐวุฒิ', 'บุญจันทร์', '', '', '', ''],
+    ['P3-024', 'ส.อ.', 'ณัฐพงษ์', 'คชราช', '', '', '', ''],
+    ['P3-025', 'ส.อ.', 'วธิตา', 'ซุพพิทักษ์', '', '', '', ''],
+    ['P3-026', 'ส.อ.', 'ธนกร', 'สุขประเสริฐ', '', '', '', ''],
+    ['P3-027', 'ส.อ.', 'อานนท์', 'ดีดพิมพ์', '', '', '', ''],
+    ['P3-028', 'พลฯ', 'รติกร', 'คำประกอบ', '', '', '', ''],
+    ['P3-029', 'พลฯ', 'จิตติพงษ์', 'นัตธิยานนท์', '', '', '', ''],
+    ['P3-030', 'พลฯ', 'ธนวินท์', 'แสงหล้า', '', '', '', ''],
+    ['P3-031', 'พลฯ', 'ธีรภัทร์', 'รูปสอาด', '', '', '', ''],
+    ['P3-032', 'พลฯ', 'นรินทร์', 'จันนวน', '', '', '', ''],
+    ['P3-033', 'พลฯ', 'ณัฐวุธ', 'สุดแก', '', '', '', ''],
+    ['P3-034', 'พลฯ', 'กล้าณรงค์', 'มหาชัย', '', '', '', ''],
+    ['P3-035', 'พลฯ', 'บดินทร์', 'ผ่องพิลา', '', '', '', ''],
+    ['P3-036', 'พลฯ', 'ศิวกร', 'คชสิทธิ์', '', '', '', ''],
+    ['P3-037', 'พลฯ', 'นิติพัฒน์', 'ดวงแก้ว', '', '', '', ''],
+    ['P3-038', 'พลฯ', 'จีรนัย', 'กิ่งแก้ว', '', '', '', ''],
+    ['P3-039', 'พลฯ', 'ยุทธพงษ์', 'เม่นสุวรรณ์', '', '', '', ''],
+    ['P3-040', 'พลฯ', 'พีระภัทร', 'ผ่องพิลา', '', '', '', ''],
+    ['P3-041', 'พลฯ', 'วีรศักดิ์', 'ศิริบุตร', '', '', '', ''],
+    ['P3-042', 'พลฯ', 'นพเก้า', 'พลเยี่ยม', '', '', '', ''],
+    ['P3-043', 'พลฯ', 'กฤตนัย', 'ศรีเมือง', '', '', '', '']
+  ];
+  
+  importToSheet(ss, SHEET_NAMES.page3, page3Data);
+  
+  // ===== PAGE 4: ร้อย.อวบ.3 (46 คน) =====
+  const page4Data = [
+    ['P4-001', 'จ.ส.อ.(พ)', 'อดิศร', 'ประกายสิทธิ์', '', '', '', ''],
+    ['P4-002', 'จ.ส.อ.', 'กรกฎ', 'พละหงษ์', '', '', '', ''],
+    ['P4-003', 'จ.ส.อ.', 'ธิวา', 'อินทร์มณี', '', '', '', ''],
+    ['P4-004', 'จ.ส.อ.', 'ธนละ', 'แสนงาม', '', '', '', ''],
+    ['P4-005', 'จ.ส.อ.', 'นฤนาท', 'นะวะมวงศ์', '', '', '', ''],
+    ['P4-006', 'จ.ส.อ.', 'สุรศักดิ์', 'ยั่งยืน', '', '', '', ''],
+    ['P4-007', 'จ.ส.อ.', 'ภูวดล', 'ชิดทัก', '', '', '', ''],
+    ['P4-008', 'จ.ส.อ.', 'อิศรา', 'ทันใจ', '', '', '', ''],
+    ['P4-009', 'จ.ส.อ.', 'สุวัฒน์', 'ชูเมือง', '', '', '', ''],
+    ['P4-010', 'จ.ส.อ.', 'ชัยณรงค์', 'พันพินิจ', '', '', '', ''],
+    ['P4-011', 'จ.ส.อ.', 'ศักราช', 'รุ่งเรือง', '', '', '', ''],
+    ['P4-012', 'จ.ส.อ.', 'คณากร', 'สิทธิชัย', '', '', '', ''],
+    ['P4-013', 'ส.อ.', 'วรวุฒิ', 'สมตน', '', '', '', ''],
+    ['P4-014', 'ส.อ.', 'พรพงศ์', 'พุทธา', '', '', '', ''],
+    ['P4-015', 'ส.อ.', 'ศิลา', 'นาวิชัย', '', '', '', ''],
+    ['P4-016', 'ส.อ.', 'สุนันท์ชัย', 'พิมเสน', '', '', '', ''],
+    ['P4-017', 'ส.อ.', 'กิตติ', 'เพิ่มดี', '', '', '', ''],
+    ['P4-018', 'ส.อ.', 'อภิเดช', 'ประสมพันธุ์', '', '', '', ''],
+    ['P4-019', 'ส.อ.', 'พรพิทักษ์', 'ทักษ์คีรี', '', '', '', ''],
+    ['P4-020', 'ส.อ.', 'สันติ', 'ชูเกตุ', '', '', '', ''],
+    ['P4-021', 'ส.อ.', 'สมชาย', 'แสงประสิทธิ์', '', '', '', ''],
+    ['P4-022', 'ส.อ.', 'วัชรินทร์', 'โกศล', '', '', '', ''],
+    ['P4-023', 'ส.อ.', 'ภาสกร', 'ธาระรูป', '', '', '', ''],
+    ['P4-024', 'ส.อ.', 'อติพล', 'อ่อนตีบ', '', '', '', ''],
+    ['P4-025', 'ส.อ.', 'สิทธิชัย', 'อ่อนช้อย', '', '', '', ''],
+    ['P4-026', 'ส.อ.', 'พงษ์ศักดิ์', 'ธรรมสอน', '', '', '', ''],
+    ['P4-027', 'ส.อ.', 'ชัยยันต์', 'ขวัญมิ่ง', '', '', '', ''],
+    ['P4-028', 'พลฯ', 'ภัคพล', 'ขาวบู่', '', '', '', ''],
+    ['P4-029', 'พลฯ', 'พงศธร', 'เพ็ชรชาว่าง', '', '', '', ''],
+    ['P4-030', 'พลฯ', 'ธนวรรธน์', 'โรจน์สุวรรณ', '', '', '', ''],
+    ['P4-031', 'พลฯ', 'ณัฐวุฒิ', 'ศรีมงคล', '', '', '', ''],
+    ['P4-032', 'พลฯ', 'ณัฐพล', 'ศรีภิญโญ', '', '', '', ''],
+    ['P4-033', 'พลฯ', 'พีรวิชย์', 'ใจบุญ', '', '', '', ''],
+    ['P4-034', 'พลฯ', 'ศิรวิทย์', 'โพธิ์เงิน', '', '', '', ''],
+    ['P4-035', 'พลฯ', 'ยศวร', 'บุญช่วย', '', '', '', ''],
+    ['P4-036', 'พลฯ', 'นพดล', 'เขียวหลง', '', '', '', ''],
+    ['P4-037', 'พลฯ', 'ธนพล', 'แก้วมะณี', '', '', '', ''],
+    ['P4-038', 'พลฯ', 'ธนกฤต', 'นาคนชม', '', '', '', ''],
+    ['P4-039', 'พลฯ', 'นภสินธุ์', 'อินทรชัย', '', '', '', ''],
+    ['P4-040', 'พลฯ', 'ปฏิภาณ', 'วงผง', '', '', '', ''],
+    ['P4-041', 'พลฯ', 'พีระพัฒน์', 'เสนีวงค์ ณ อยุธยา', '', '', '', ''],
+    ['P4-042', 'พลฯ', 'อดิศร', 'จันธิดา', '', '', '', ''],
+    ['P4-043', 'พลฯ', 'ศุภพล', 'พาชื่น', '', '', '', ''],
+    ['P4-044', 'พลฯ', 'อนันทวุธ', 'นาคชุ่ม', '', '', '', ''],
+    ['P4-045', 'พลฯ', 'พิชยะ', 'บุญชื่น', '', '', '', ''],
+    ['P4-046', 'พลฯ', 'ณิติภัทร', 'กิติอานนท์', '', '', '', '']
+  ];
+  
+  importToSheet(ss, SHEET_NAMES.page4, page4Data);
+  
+  // ===== PAGE 5: ร้อย.บก. (77 คน) =====
+  const page5Data = [
+    ['P5-001', 'จ.ส.อ.(พ)', 'มิตร', 'อายุยืน', '', '', '', ''],
+    ['P5-002', 'จ.ส.อ.(พ)', 'สมพิศ', 'โฉมจิตร', '', '', '', ''],
+    ['P5-003', 'จ.ส.อ.(พ)', 'สิงห์ทอง', 'โสภณ', '', '', '', ''],
+    ['P5-004', 'จ.ส.อ.', 'วุฒิพงษ์', 'ผิวเพชร', '', '', '', ''],
+    ['P5-005', 'จ.ส.อ.', 'สุกฤษฎิ์', 'สิมมาเต่า', '', '', '', ''],
+    ['P5-006', 'จ.ส.อ.', 'สาธิต', 'ทอจันทร์', '', '', '', ''],
+    ['P5-007', 'จ.ส.อ.', 'กฤษกร', 'เสนจันทึก', '', '', '', ''],
+    ['P5-008', 'จ.ส.อ.', 'สงัด', 'ดวงจันทร์โชติ', '', '', '', ''],
+    ['P5-009', 'จ.ส.อ.', 'วิเวก', 'นามคง', '', '', '', ''],
+    ['P5-010', 'จ.ส.อ.', 'ทนุศักดิ์', 'ทารักษ์', '', '', '', ''],
+    ['P5-011', 'จ.ส.อ.', 'รังสี', 'หงษ์หิน', '', '', '', ''],
+    ['P5-012', 'จ.ส.อ.', 'ไพรรัตน์', 'ทรัพย์ศิริ', '', '', '', ''],
+    ['P5-013', 'จ.ส.อ.', 'ทรงพล', 'จันทวงษ์', '', '', '', ''],
+    ['P5-014', 'ส.อ.', 'จักรกฤษณ์', 'ไวธัญญกิจ', '', '', '', ''],
+    ['P5-015', 'ส.อ.', 'ปราชญา', 'อยู่เย็น', '', '', '', ''],
+    ['P5-016', 'ส.อ.', 'ปิยพล', 'รางแดง', '', '', '', ''],
+    ['P5-017', 'ส.อ.', 'นัยธร', 'สร้อยทอง', '', '', '', ''],
+    ['P5-018', 'ส.อ.', 'ธีรพงษ์', 'พระนอน', '', '', '', ''],
+    ['P5-019', 'ส.อ.', 'ธรรมนูญ', 'รัตนประภา', '', '', '', ''],
+    ['P5-020', 'ส.อ.', 'อธิราช', 'จันทร์แจ้ง', '', '', '', ''],
+    ['P5-021', 'ส.อ.', 'สรรเสริญ', 'นวนศิริ', '', '', '', ''],
+    ['P5-022', 'ส.อ.', 'สันติ', 'เกิดสุข', '', '', '', ''],
+    ['P5-023', 'ส.อ.', 'วิระชัย', 'ผ่องแผ้ว', '', '', '', ''],
+    ['P5-024', 'ส.อ.', 'เจนวิทย์', 'จันทร์ประสิทธิ์', '', '', '', ''],
+    ['P5-025', 'ส.อ.', 'เทพฤทธิ์', 'ลิ้มประสงค์', '', '', '', ''],
+    ['P5-026', 'ส.อ.', 'จักรกฤษณ์', 'เถาว์หิรัญ', '', '', '', ''],
+    ['P5-027', 'ส.อ.', 'สุภัทร', 'ท้าวนอก', '', '', '', ''],
+    ['P5-028', 'ส.อ.', 'ธีรพัฒน์', 'มโหธร', '', '', '', ''],
+    ['P5-029', 'ส.อ.', 'วารินทร์', 'คงคา', '', '', '', ''],
+    ['P5-030', 'ส.อ.', 'มงคล', 'แก้วแกม', '', '', '', ''],
+    ['P5-031', 'ส.อ.', 'ยุทธนา', 'พึ่งนุสนธิ์', '', '', '', ''],
+    ['P5-032', 'ส.อ.', 'มโนรมย์', 'วัฒนเสน', '', '', '', ''],
+    ['P5-033', 'ส.อ.', 'จงรักษ์', 'ทองเงิน', '', '', '', ''],
+    ['P5-034', 'ส.อ.', 'สมภพ', 'เกิดลาภ', '', '', '', ''],
+    ['P5-035', 'ส.อ.', 'สมศักดิ์', 'กันษร', '', '', '', ''],
+    ['P5-036', 'ส.อ.', 'ประมาณ', 'วงษ์เล็ก', '', '', '', ''],
+    ['P5-037', 'ส.อ.', 'มุทิตา', 'สอนจันทร์', '', '', '', ''],
+    ['P5-038', 'ส.อ.', 'ธีรยุทธ', 'ทะยานรัมย์', '', '', '', ''],
+    ['P5-039', 'ส.อ.', 'ประสิทธิ์', 'คำมี', '', '', '', ''],
+    ['P5-040', 'ส.อ.', 'เวทพิสิฐ', 'พุฒซ้อน', '', '', '', ''],
+    ['P5-041', 'ส.อ.', 'กิตติ์ธนา', 'ยิ้มเจริญ', '', '', '', ''],
+    ['P5-042', 'ส.อ.', 'กฤษดา', 'ขึ้นทันตา', '', '', '', ''],
+    ['P5-043', 'ส.อ.', 'ลิขิต', 'ศรวารินทร์', '', '', '', ''],
+    ['P5-044', 'ส.อ.', 'โกศล', 'ฤทธิ์จำนงค์', '', '', '', ''],
+    ['P5-045', 'ส.อ.', 'พิทักษ์', 'โพธิ์เพ็ง', '', '', '', ''],
+    ['P5-046', 'ส.อ.', 'กังวาน', 'ต๊ะทองคำ', '', '', '', ''],
+    ['P5-047', 'ส.อ.', 'ชรินทร์', 'จันทนา', '', '', '', ''],
+    ['P5-048', 'ส.อ.', 'ดิเรก', 'ปกรณ์', '', '', '', ''],
+    ['P5-049', 'ส.อ.', 'ศุภวัฒน์', 'นามสมุทร', '', '', '', ''],
+    ['P5-050', 'ส.อ.', 'ฉัตรมงคล', 'ลาภเวช', '', '', '', ''],
+    ['P5-051', 'ส.อ.', 'ณขวัญ', 'บุญทศ', '', '', '', ''],
+    ['P5-052', 'ส.อ.', 'วุฒิชัย', 'ไมตรีจิตร์', '', '', '', ''],
+    ['P5-053', 'ส.อ.', 'ศราวุฒิ', 'วิลัยรักษ์', '', '', '', ''],
+    ['P5-054', 'ส.อ.', 'วุฒิชัย', 'ผลดี', '', '', '', ''],
+    ['P5-055', 'ส.อ.', 'ยุทธนา', 'รอดเพ็ชร', '', '', '', ''],
+    ['P5-056', 'ส.อ.', 'ณัฐพล', 'คล้ายน้อย', '', '', '', ''],
+    ['P5-057', 'ส.อ.', 'นัฐพงษ์', 'ยิ้มทะโชติ', '', '', '', ''],
+    ['P5-058', 'พลฯ', 'มนตรี', 'แมนไทย', '', '', '', ''],
+    ['P5-059', 'พลฯ', 'ภีมวัจน์', 'สุดท้าย', '', '', '', ''],
+    ['P5-060', 'พลฯ', 'ธีรวัฒน์', 'สุระประเสริฐ', '', '', '', ''],
+    ['P5-061', 'พลฯ', 'เดชดนัย', 'เพิ่มผล', '', '', '', ''],
+    ['P5-062', 'พลฯ', 'สราวุธ', 'คู่แก้ว', '', '', '', ''],
+    ['P5-063', 'พลฯ', 'เทอดไท', 'ทาทอง', '', '', '', ''],
+    ['P5-064', 'พลฯ', 'รัตนชัย', 'ขึ้นนกคุ้ม', '', '', '', ''],
+    ['P5-065', 'พลฯ', 'ศรัณย์', 'จันทรา', '', '', '', ''],
+    ['P5-066', 'พลฯ', 'สมพงษ์', 'จุลเพ็ง', '', '', '', ''],
+    ['P5-067', 'พลฯ', 'อภิรักษ์', 'โมกงาม', '', '', '', ''],
+    ['P5-068', 'พลฯ', 'ศักดิ์ชัย', 'มั่งมี', '', '', '', ''],
+    ['P5-069', 'พลฯ', 'อนิรุทธ์', 'ศรีวิชัย', '', '', '', ''],
+    ['P5-070', 'พลฯ', 'รัฐกรณ์', 'เชียงตา', '', '', '', ''],
+    ['P5-071', 'พลฯ', 'จักรกฤษ', 'ศรีพนม', '', '', '', ''],
+    ['P5-072', 'พลฯ', 'ธนกฤต', 'เกิดสุวรรณ', '', '', '', ''],
+    ['P5-073', 'พลฯ', 'ธนายุต', 'กุลพรม', '', '', '', ''],
+    ['P5-074', 'พลฯ', 'ธวัชชัย', 'เพ็งน้ำคำ', '', '', '', ''],
+    ['P5-075', 'พลฯ', 'จักรพงศ์', 'แก่นแก้ว', '', '', '', ''],
+    ['P5-076', 'พลฯ', 'จตุรงค์', 'ราชบัณฑิต', '', '', '', ''],
+    ['P5-077', 'พลฯ', 'กฤษฏา', 'แสงทองสา', '', '', '', '']
+  ];
+  
+  importToSheet(ss, SHEET_NAMES.page5, page5Data);
+  
+  Logger.log('🎉 Data import complete! Total: 233 personnel');
+  return 'Data import complete!';
+}
+
+/**
+ * Helper function to import data to a sheet
+ */
+function importToSheet(ss, sheetName, data) {
+  const sheet = ss.getSheetByName(sheetName);
+  if (sheet && data.length > 0) {
+    // Clear existing data (except header)
+    const lastRow = sheet.getLastRow();
+    if (lastRow > 1) {
+      sheet.deleteRows(2, lastRow - 1);
+    }
+    // Insert new data
+    sheet.getRange(2, 1, data.length, data[0].length).setValues(data);
+    Logger.log('✅ Imported ' + data.length + ' records to ' + sheetName);
+  }
+}
+
+/**
+ * Full setup - รันฟังก์ชันนี้ครั้งแรก!
+ */
+function fullSetup() {
+  Logger.log('🚀 Starting full setup...');
+  setupSheets();
+  Utilities.sleep(1000);
+  importInitialData();
+  Logger.log('');
+  Logger.log('='.repeat(50));
+  Logger.log('🎉 SETUP COMPLETE!');
+  Logger.log('='.repeat(50));
+  Logger.log('');
+  Logger.log('📋 Next steps:');
+  Logger.log('1. Click "Deploy" > "New deployment"');
+  Logger.log('2. Select type: "Web app"');
+  Logger.log('3. Execute as: "Me"');
+  Logger.log('4. Who has access: "Anyone"');
+  Logger.log('5. Click "Deploy" and copy the URL');
+  Logger.log('6. Paste URL in js/config.js (APPS_SCRIPT_URL)');
+  Logger.log('');
+  return 'Full setup complete! Ready to deploy.';
+}
+
+/**
+ * Test connection to spreadsheet
+ */
+function testConnection() {
+  try {
     const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-    const headers = ['id', 'rank', 'firstName', 'lastName', 'taxStatus'];
-
-    Object.values(SHEET_NAMES).forEach(name => {
-        let sheet = ss.getSheetByName(name);
-        if (!sheet) {
-            sheet = ss.insertSheet(name);
-        }
-        // Set headers
-        sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
-        // Format header
-        sheet.getRange(1, 1, 1, headers.length)
-            .setFontWeight('bold')
-            .setBackground('#f5f5f7');
-    });
-
-    Logger.log('Sheets setup complete!');
+    const sheets = ss.getSheets().map(s => s.getName());
+    Logger.log('✅ Connected to: ' + ss.getName());
+    Logger.log('📋 Available sheets: ' + sheets.join(', '));
+    return { status: 'ok', name: ss.getName(), sheets: sheets };
+  } catch (error) {
+    Logger.log('❌ Error: ' + error.message);
+    return { status: 'error', message: error.message };
+  }
 }
