@@ -15,7 +15,7 @@ class SheetsAPI {
             return false;
         }
         try {
-            const response = await fetch(`${this.baseUrl}?action=ping`);
+            const response = await fetch(`${this.baseUrl}?action=ping`, { cache: 'no-store' });
             const data = await response.json();
             this.isConnected = data.status === 'ok';
             return this.isConnected;
@@ -26,17 +26,48 @@ class SheetsAPI {
         }
     }
 
-    // ดึงข้อมูลจาก Google Sheets
-    async fetchData(sheetName) {
+    // ส่ง POST request - ใช้ Content-Type: text/plain เพื่อหลีกเลี่ยง CORS preflight
+    async _post(payload) {
+        if (!this.baseUrl) return null;
+        try {
+            const response = await fetch(this.baseUrl, {
+                method: 'POST',
+                // text/plain = simple request = ไม่มี preflight OPTIONS
+                // Google Apps Script ไม่รองรับ OPTIONS preflight
+                headers: { 'Content-Type': 'text/plain' },
+                body: JSON.stringify(payload)
+            });
+            return await response.json();
+        } catch (error) {
+            console.error('API POST error:', error);
+            return null;
+        }
+    }
+
+    // ดึงข้อมูลทุก page พร้อมกันใน 1 request
+    async fetchAllData() {
+        if (!this.isConnected) return null;
+        try {
+            const response = await fetch(`${this.baseUrl}?action=getAllData`, { cache: 'no-store' });
+            const result = await response.json();
+            if (result.status === 'ok') return result.data;
+            return null;
+        } catch (error) {
+            console.error('Error fetching all data:', error);
+            return null;
+        }
+    }
+
+    // ดึงข้อมูล page เดียว (ใช้ pageKey เช่น 'page1')
+    async fetchData(pageKey) {
         if (!this.isConnected) return null;
         try {
             const response = await fetch(
-                `${this.baseUrl}?action=getData&sheet=${encodeURIComponent(sheetName)}`
+                `${this.baseUrl}?action=getData&page=${encodeURIComponent(pageKey)}`,
+                { cache: 'no-store' }
             );
-            const data = await response.json();
-            if (data.status === 'ok') {
-                return data.data;
-            }
+            const result = await response.json();
+            if (result.status === 'ok') return result.data;
             return null;
         } catch (error) {
             console.error('Error fetching data:', error);
@@ -44,47 +75,40 @@ class SheetsAPI {
         }
     }
 
-    // อัปเดตสถานะการยื่นภาษี
-    async updateStatus(sheetName, personId, status) {
+    // อัปเดตสถานะการยื่นภาษี (พร้อม verifiedBy / verifiedAt / verifyType)
+    async updateStatus(pageKey, personId, statusData) {
         if (!this.isConnected) return false;
-        try {
-            const response = await fetch(this.baseUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    action: 'updateStatus',
-                    sheet: sheetName,
-                    id: personId,
-                    status: status
-                })
-            });
-            const data = await response.json();
-            return data.status === 'ok';
-        } catch (error) {
-            console.error('Error updating status:', error);
-            return false;
-        }
+        const result = await this._post({
+            action: 'updateStatus',
+            page: pageKey,
+            id: personId,
+            status: statusData.status,
+            verifiedBy: statusData.verifiedBy || '',
+            verifiedAt: statusData.verifiedAt || new Date().toISOString(),
+            verifyType: statusData.verifyType || ''
+        });
+        return result && result.status === 'ok';
     }
 
     // อัปเดตสถานะหลายรายการพร้อมกัน
-    async batchUpdateStatus(sheetName, updates) {
+    async batchUpdateStatus(pageKey, updates) {
         if (!this.isConnected) return false;
-        try {
-            const response = await fetch(this.baseUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    action: 'batchUpdate',
-                    sheet: sheetName,
-                    updates: updates
-                })
-            });
-            const data = await response.json();
-            return data.status === 'ok';
-        } catch (error) {
-            console.error('Error batch updating:', error);
-            return false;
-        }
+        const result = await this._post({
+            action: 'batchUpdate',
+            page: pageKey,
+            updates: updates
+        });
+        return result && result.status === 'ok';
+    }
+
+    // Sync ข้อมูลทั้งหมดจาก LocalStorage ขึ้น Sheets
+    async syncAllDataToSheets(allData) {
+        if (!this.isConnected) return false;
+        const result = await this._post({
+            action: 'syncData',
+            data: allData
+        });
+        return result && result.status === 'ok';
     }
 }
 

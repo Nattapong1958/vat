@@ -66,11 +66,14 @@ class TaxVerificationApp {
             }
         }
 
-        // Try connecting to Google Sheets
+        // เชื่อมต่อ Google Sheets และ sync ข้อมูล
         if (CONFIG.APPS_SCRIPT_URL) {
             sheetsAPI.checkConnection().then(connected => {
                 this.updateConnectionStatus(connected);
-                if (connected) this.syncFromSheets();
+                if (connected) {
+                    this.syncFromSheets();
+                    this.startPolling(); // เริ่ม polling ทุก 30 วินาที
+                }
             });
         }
     }
@@ -215,6 +218,7 @@ class TaxVerificationApp {
 
     // Load data from localStorage or default
     async loadData() {
+        // โหลดข้อมูลจาก DEFAULT_DATA หรือ localStorage ก่อน (fallback)
         for (const key of this.pageKeys) {
             const localData = storageManager.loadPageData(key);
             if (localData) {
@@ -226,31 +230,79 @@ class TaxVerificationApp {
         }
     }
 
-    // Sync data from Google Sheets
-    async syncFromSheets() {
-        for (const key of this.pageKeys) {
-            const sheetName = CONFIG.SHEET_NAMES[key];
-            const sheetData = await sheetsAPI.fetchData(sheetName);
-            if (sheetData) {
-                // Merge sheet data with local data
-                this.mergeData(key, sheetData);
+    // Sync data from Google Sheets (fetch all pages in 1 request)
+    async syncFromSheets(silent = false) {
+        try {
+            // ดึงข้อมูลทุก page ใน 1 request
+            const allSheetsData = await sheetsAPI.fetchAllData();
+            if (!allSheetsData) return;
+
+            let hasChanges = false;
+            for (const key of this.pageKeys) {
+                if (allSheetsData[key]) {
+                    const changed = this.mergeData(key, allSheetsData[key]);
+                    if (changed) hasChanges = true;
+                }
             }
+
+            if (hasChanges) {
+                this.renderPage(this.currentPage);
+                this.renderNavTabs();
+                this.updateStorageIndicator();
+            }
+
+            if (!silent) this.showToast('ซิงค์ข้อมูลจาก Google Sheets แล้ว', 'success');
+        } catch (err) {
+            console.warn('syncFromSheets error:', err);
         }
-        this.renderPage(this.currentPage);
-        this.showToast('Synced with Google Sheets', 'success');
     }
 
-    // Merge remote data with local
+    // Polling - ดึงข้อมูลใหม่ทุก 30 วินาที (ให้เห็นการเปลี่ยนแปลงจากอุปกรณ์อื่น)
+    startPolling() {
+        if (!CONFIG.APPS_SCRIPT_URL) return;
+        setInterval(async () => {
+            if (sheetsAPI.isConnected) {
+                await this.syncFromSheets(true); // silent = ไม่แสดง toast
+            } else {
+                // ลองเชื่อมต่อใหม่ถ้าหลุด
+                const ok = await sheetsAPI.checkConnection();
+                this.updateConnectionStatus(ok);
+            }
+        }, 30000); // ทุก 30 วินาที
+    }
+
+    // Merge remote sheet data into local data
+    // คืนค่า true ถ้ามีการเปลี่ยนแปลง
     mergeData(pageKey, remoteData) {
-        if (!remoteData || !remoteData.length) return;
+        // remoteData = { personnel: [...], lastUpdated: '...' }
+        const personnel = remoteData.personnel || remoteData;
+        if (!personnel || !personnel.length) return false;
+
         const localPage = this.data[pageKey];
-        remoteData.forEach(remote => {
+        if (!localPage) return false;
+
+        let changed = false;
+        personnel.forEach(remote => {
             const local = localPage.personnel.find(p => p.id === remote.id);
-            if (local && remote.taxStatus) {
-                local.taxStatus = remote.taxStatus;
+            if (local) {
+                // อัปเดตสถานะจาก Sheets เสมอ (Sheets = source of truth)
+                if (remote.taxStatus !== local.taxStatus) {
+                    local.taxStatus = remote.taxStatus || '';
+                    changed = true;
+                }
+                if (remote.verifiedBy && remote.verifiedBy !== local.verifiedBy) {
+                    local.verifiedBy = remote.verifiedBy;
+                    changed = true;
+                }
+                if (remote.verifiedAt && remote.verifiedAt !== local.verifiedAt) {
+                    local.verifiedAt = remote.verifiedAt;
+                    changed = true;
+                }
             }
         });
-        storageManager.savePageData(pageKey, localPage);
+
+        if (changed) storageManager.savePageData(pageKey, localPage);
+        return changed;
     }
 
     // Get stats for a page
@@ -695,8 +747,12 @@ class TaxVerificationApp {
 
             // Sync to Google Sheets
             if (sheetsAPI.isConnected) {
-                const sheetName = CONFIG.SHEET_NAMES[this.currentPage];
-                sheetsAPI.updateStatus(sheetName, personId, status);
+                sheetsAPI.updateStatus(this.currentPage, personId, {
+                    status: person.taxStatus,
+                    verifiedBy: person.verifiedBy ? person.verifiedBy.name : '',
+                    verifiedAt: person.verifiedAt,
+                    verifyType: person.isSelfVerified ? 'self' : 'admin'
+                });
             }
 
             // Re-render
@@ -767,8 +823,13 @@ class TaxVerificationApp {
 
         // Sync batch to Sheets
         if (sheetsAPI.isConnected && updates.length) {
-            const sheetName = CONFIG.SHEET_NAMES[this.currentPage];
-            sheetsAPI.batchUpdateStatus(sheetName, updates);
+            const fullUpdates = updates.map(u => ({
+                ...u,
+                verifiedBy: 'Admin',
+                verifiedAt: new Date().toISOString(),
+                verifyType: 'admin'
+            }));
+            sheetsAPI.batchUpdateStatus(this.currentPage, fullUpdates);
         }
 
         const count = this.selectedRows.size;
